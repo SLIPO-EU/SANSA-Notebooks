@@ -49,22 +49,6 @@ make
 make up
 make load-data
 ```
-Then you can execute any of the following commands to run the examples from the command line:
-```
-make cli-triples-reader
-make cli-triple-ops
-make cli-triples-writer
-make cli-pagerank
-make cli-rdf-stats
-make cli-inferencing
-make cli-sparklify
-make cli-owl-reader-manchester
-make cli-owl-reader-functional
-make cli-owl-dataset-reader-manchester
-make cli-owl-dataset-reader-functional
-make cli-clustering
-make cli-rule-mining
-```
 
 # Notes
 * The instructions from this repo were tested on Ubuntu 18.04 with Docker engine 17.03.
