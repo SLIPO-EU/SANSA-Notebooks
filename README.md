@@ -69,5 +69,3 @@ make cli-rule-mining
 # Notes
 * The instructions from this repo were tested on Ubuntu 18.04 with Docker engine 17.03.
 * Maintained by [Rajjat Dadwal](https://github.com/Rajjat)
-                                                                                                                                                                                          71,1          Bot
-                                                                                                                                                                                          1,1           Top
