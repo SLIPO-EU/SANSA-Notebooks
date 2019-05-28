@@ -1,0 +1,1059 @@
+{
+  "paragraphs": [
+    {
+      "title": "Reading Austria OSM RDF data with SANSA N-tripleReader",
+      "text": "%spark\nimport org.apache.jena.riot.Lang\nimport com.typesafe.config.ConfigFactory\nimport net.sansa_stack.ml.spark.clustering.utils.DataProcessing\nimport net.sansa_stack.rdf.spark.io._\n\n\nval input \u003d \"hdfs://namenode:8020/data/data/austria-pois.osm.rdf.nt\"\nval lang \u003d Lang.NTRIPLES\n\nval triples \u003d spark.rdf(lang)(input)\n\ntriples.take(10).foreach(println)",
+      "user": "anonymous",
+      "dateUpdated": "2019-05-24 10:45:44.970",
+      "config": {
+        "colWidth": 12.0,
+        "fontSize": 9.0,
+        "enabled": true,
+        "results": {},
+        "editorSetting": {
+          "language": "scala",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "editorMode": "ace/mode/scala",
+        "title": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "TEXT",
+            "data": "import org.apache.jena.riot.Lang\nimport com.typesafe.config.ConfigFactory\nimport net.sansa_stack.ml.spark.clustering.utils.DataProcessing\nimport net.sansa_stack.rdf.spark.io._\ninput: String \u003d hdfs://namenode:8020/data/data/austria-pois.osm.rdf.nt\nlang: org.apache.jena.riot.Lang \u003d Lang:N-Triples\ntriples: org.apache.spark.rdd.RDD[org.apache.jena.graph.Triple] \u003d MapPartitionsRDD[20] at mapPartitions at NTripleReader.scala:140\nhttp://openstreetmap.org/node/160822 @http://www.opengis.net/ont/geosparql#hasGeometry http://openstreetmap.org/node/160822/geom\nhttp://openstreetmap.org/node/160822/geom @rdf:type http://www.opengis.net/ont/sf#POINT\nhttp://openstreetmap.org/node/160822/geom @http://www.opengis.net/ont/geosparql#asWKT \"\u003chttp://www.opengis.net/def/crs/EPSG/0/4326\u003e POINT (12.1383411 47.482147600000005)\"^^http://www.opengis.net/ont/geosparql#wktLiteral\nhttp://openstreetmap.org/node/160822 @rdf:type http://www.opengis.net/ont/geosparql#Feature\nhttp://openstreetmap.org/node/160822 @https://wiki.openstreetmap.org/Key:name \"Kirchbichler Boden Nasensiedlung\"^^http://www.w3.org/2001/XMLSchema#string\nhttp://openstreetmap.org/node/160822 @https://wiki.openstreetmap.org/Key:bus \"yes\"^^http://www.w3.org/2001/XMLSchema#string\nhttp://openstreetmap.org/node/160822 @https://wiki.openstreetmap.org/Key:public_transport \"stop_position\"^^http://www.w3.org/2001/XMLSchema#string\nhttp://openstreetmap.org/node/380143 @http://www.opengis.net/ont/geosparql#hasGeometry http://openstreetmap.org/node/380143/geom\nhttp://openstreetmap.org/node/380143/geom @rdf:type http://www.opengis.net/ont/sf#POINT\nhttp://openstreetmap.org/node/380143/geom @http://www.opengis.net/ont/geosparql#asWKT \"\u003chttp://www.opengis.net/def/crs/EPSG/0/4326\u003e POINT (16.237151100000002 48.204745)\"^^http://www.opengis.net/ont/geosparql#wktLiteral\n"
+          }
+        ]
+      },
+      "runtimeInfos": {
+        "jobUrl": {
+          "propertyName": "jobUrl",
+          "label": "SPARK JOB",
+          "tooltip": "View in Spark web UI",
+          "group": "spark",
+          "values": [
+            "http://6a40bc0cfdf0:4040/jobs/job?id\u003d8"
+          ],
+          "interpreterSettingId": "spark"
+        }
+      },
+      "apps": [],
+      "jobName": "paragraph_1558622946233_-1510796425",
+      "id": "20190523-144906_1199881195",
+      "dateCreated": "2019-05-23 14:49:06.233",
+      "dateStarted": "2019-05-24 10:26:49.135",
+      "dateFinished": "2019-05-24 10:26:51.491",
+      "status": "FINISHED",
+      "progressUpdateIntervalMs": 500
+    },
+    {
+      "title": "APIs to get coordinates, categories and finding distance between coordinates",
+      "text": "%spark\nimport org.apache.spark.rdd.RDD\ncase class spatial(longitude: Double, latitude: Double)  extends Serializable\n def getPOICoordinates:RDD[(Long, spatial)]  \u003d{\n    // get the coordinates of pois\n    val pattern \u003d \"POINT (.+ .+)\".r\n    val poiCoordinatesString \u003d triples.filter(x \u003d\u003e x.getPredicate.toString().equalsIgnoreCase(\"http://www.opengis.net/ont/geosparql#asWKT\"))\n    val removeOther\u003dpoiCoordinatesString.filter(f\u003d\u003e(!f.getSubject.toString().contains(\"http://openstreetmap.org/way/\")))\n    val removeRelation\u003dremoveOther.filter(f\u003d\u003e(!f.getSubject.toString().contains(\"http://openstreetmap.org/relation/\")))\n      .map(x \u003d\u003e (x.getSubject.toString().replace(\"http://openstreetmap.org/node/\", \"\").replace(\"/geom\", \"\").toLong,\n        pattern.findFirstIn(x.getObject.toString()).head.replace(\"POINT \", \"\")\n          .replace(\"^^http://www.opengis.net/ont/geosparql#wktLiteral\", \"\").replaceAll(\"^\\\"|\\\"$\", \"\"))) \n          // transform to Coordinate object\n      //removeRelation.coalesce(1)saveAsTextFile(\"/home/rajjat/Desktop/OSM/res2\")    \n  val m\u003dremoveRelation.mapValues(x \u003d\u003e {\n      val coordinates \u003d x.replace(\"(\", \"\").replace(\")\", \"\").split(\" \")\n      spatial(coordinates(0).toDouble, coordinates(1).toDouble)\n    })\n    m\n   \n }\n def getCat():RDD[(Long, String)]\u003d{\n    val keyName\u003dtriples.filter(f\u003d\u003ef.getPredicate.toString().contains(\"https://wiki.openstreetmap.org/Key:amenity\"))\n    val filterSub\u003dkeyName.filter(f\u003d\u003ef.getSubject.toString().contains(\"http://openstreetmap.org/node\"))\n    val getKV\u003d filterSub.map(x \u003d\u003e ((x.getSubject.toString().replace(\"http://openstreetmap.org/node/\", \"\").toLong),\n          x.getObject.toString()))\n      getKV.take(2).foreach(println)\n          getKV\n          \n  }\n  \n  def distFrom(locationTargetd:spatial,otherCordinate:(spatial, String)):(String,Double,spatial)\u003d{\n    val earthRadius \u003d 6371000; //meters\n    val dLat \u003d Math.toRadians(locationTargetd.latitude-otherCordinate._1.latitude);\n    val dLng \u003d Math.toRadians(locationTargetd.longitude-otherCordinate._1.longitude);\n    val a \u003d Math.sin(dLat/2) * Math.sin(dLat/2) +\n               Math.cos(Math.toRadians(otherCordinate._1.latitude)) * Math.cos(Math.toRadians(locationTargetd.latitude)) *\n               Math.sin(dLng/2) * Math.sin(dLng/2);\n    val c \u003d 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));\n    val dist \u003d (earthRadius * c);\n\n    (otherCordinate._2,dist,otherCordinate._1)\n    }\n",
+      "user": "anonymous",
+      "dateUpdated": "2019-05-24 10:46:45.196",
+      "config": {
+        "colWidth": 12.0,
+        "fontSize": 9.0,
+        "enabled": true,
+        "results": {},
+        "editorSetting": {
+          "language": "scala",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "editorMode": "ace/mode/scala",
+        "title": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "TEXT",
+            "data": "import org.apache.spark.rdd.RDD\ndefined class spatial\ngetPOICoordinates: org.apache.spark.rdd.RDD[(Long, spatial)]\ngetCat: ()org.apache.spark.rdd.RDD[(Long, String)]\nfindD: (locationTargetd: spatial, otherCordinate: (spatial, String))(String, Double, spatial)\ndistFrom: (locationTargetd: spatial, otherCordinate: (spatial, String))(String, Double, spatial)\n"
+          }
+        ]
+      },
+      "apps": [],
+      "jobName": "paragraph_1558623658665_-492387672",
+      "id": "20190523-150058_1768200347",
+      "dateCreated": "2019-05-23 15:00:58.665",
+      "dateStarted": "2019-05-24 10:26:51.562",
+      "dateFinished": "2019-05-24 10:26:52.947",
+      "status": "FINISHED",
+      "progressUpdateIntervalMs": 500
+    },
+    {
+      "title": "KV pair of poiID,coordinates and categories",
+      "text": "%spark\ncase class PoiOSM(poi_id: Long, coordinate: spatial, categories: String)  extends Serializable\n var poiCoordinates: RDD[(Long, spatial)]\u003d getPOICoordinates.persist()\n  var categoriesOSM\u003d getCat\n  var join\u003dpoiCoordinates.join(categoriesOSM)//.join(cuisne)\n  val pois\u003djoin.map(f\u003d\u003ePoiOSM(f._1,f._2._1,f._2._2.toString))\n",
+      "user": "anonymous",
+      "dateUpdated": "2019-05-24 10:47:12.782",
+      "config": {
+        "colWidth": 12.0,
+        "fontSize": 9.0,
+        "enabled": true,
+        "results": {},
+        "editorSetting": {
+          "language": "scala",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "editorMode": "ace/mode/scala",
+        "title": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "TEXT",
+            "data": "defined class PoiOSM\npoiCoordinates: org.apache.spark.rdd.RDD[(Long, spatial)] \u003d MapPartitionsRDD[25] at mapValues at \u003cconsole\u003e:57\n(15079902,\"post_office\")\n(15337840,\"fuel\")\ncategoriesOSM: org.apache.spark.rdd.RDD[(Long, String)] \u003d MapPartitionsRDD[28] at map at \u003cconsole\u003e:47\njoin: org.apache.spark.rdd.RDD[(Long, (spatial, String))] \u003d MapPartitionsRDD[31] at join at \u003cconsole\u003e:53\npois: org.apache.spark.rdd.RDD[PoiOSM] \u003d MapPartitionsRDD[32] at map at \u003cconsole\u003e:57\n"
+          }
+        ]
+      },
+      "runtimeInfos": {
+        "jobUrl": {
+          "propertyName": "jobUrl",
+          "label": "SPARK JOB",
+          "tooltip": "View in Spark web UI",
+          "group": "spark",
+          "values": [
+            "http://6a40bc0cfdf0:4040/jobs/job?id\u003d9"
+          ],
+          "interpreterSettingId": "spark"
+        }
+      },
+      "apps": [],
+      "jobName": "paragraph_1558623821599_-1040850696",
+      "id": "20190523-150341_1768418272",
+      "dateCreated": "2019-05-23 15:03:41.599",
+      "dateStarted": "2019-05-24 10:26:52.983",
+      "dateFinished": "2019-05-24 10:26:54.622",
+      "status": "FINISHED",
+      "progressUpdateIntervalMs": 500
+    },
+    {
+      "title": "Calculating number of neighbours around a threshold distance, Neighbors Entropy and competitiveness",
+      "text": "%spark\n\ncase class finddist(poi:Array[(String, Double, spatial)])\n\n//val poiCategorySetVienna \u003d tomTomData.poiCategoryId\n       val poiCategorySetVienna \u003d pois.map(poi \u003d\u003e (poi.coordinate,poi.categories)).persist()\n    println(pois.count())\n    val locationTargetd\u003dspatial(16.3738346,48.20817324)\n    val collectted\u003dpoiCategorySetVienna.collect\n    val findDistance\u003dcollectted.map(f\u003d\u003edistFrom(locationTargetd,f))\n    val filterDistance\u003dfindDistance.filter(f\u003d\u003ef._2\u003c200)\n    val casefilterDistance\u003dfinddist(filterDistance)\n    filterDistance.take(2).foreach(println)\n    val density\u003dfilterDistance.size\n    println(\"density\u003d\"+density)\n    \n    //entropy\n    val entropy\u003dfilterDistance.map(f\u003d\u003ef._1).toSet\n    val countDiffernetVenues\u003dentropy.size\n    println(\"entropy\u003d\"+countDiffernetVenues)\n    \n    //comeptitiveness\n    val shopName\u003d\"bar\"\n    val countCoffeShop\u003dfilterDistance.filter(f\u003d\u003ef._1.contains(shopName))\n    val casefilterShop\u003dfinddist(countCoffeShop)\n    println(\"percenatge of bar to total number of nearby places.  \u003d\"+(countCoffeShop.size*100/density)+\"%\")\n   ",
+      "user": "anonymous",
+      "dateUpdated": "2019-05-24 10:38:33.883",
+      "config": {
+        "colWidth": 12.0,
+        "fontSize": 9.0,
+        "enabled": true,
+        "results": {},
+        "editorSetting": {
+          "language": "scala",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "editorMode": "ace/mode/scala",
+        "title": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "TEXT",
+            "data": "defined class finddist\npoiCategorySetVienna: org.apache.spark.rdd.RDD[(spatial, String)] \u003d MapPartitionsRDD[36] at map at \u003cconsole\u003e:61\n45472\nlocationTargetd: spatial \u003d spatial(16.3738346,48.20817324)\ncollectted: Array[(spatial, String)] \u003d Array((spatial(14.218174600000001,48.5538931),\"fuel\"), (spatial(14.2434174,47.5685081),\"doctors\"), (spatial(16.370722400000002,48.303155100000005),\"charging_station\"), (spatial(14.286806,48.2666039),\"pub\"), (spatial(13.0023186,47.8082251),\"dentist\"), (spatial(14.0390832,48.4169494),\"bar\"), (spatial(11.659643500000001,47.3227011),\"pub\"), (spatial(13.0420148,47.801107800000004),\"fast_food\"), (spatial(14.850021400000001,46.805519700000005),\"post_office\"), (spatial(13.461506900000002,47.3847651),\"restaurant\"), (spatial(13.9041805,47.446050500000005),\"veterinary\"), (spatial(14.9948557,47.423086500000004),\"doctors\"), (spatial(15.724830800000001,47.411017),\"restaurant\"), (spatial(13.038193000000001,47.797786300000006),\"parking\"), (spatial(14.1596825,48.35...findDistance: Array[(String, Double, spatial)] \u003d Array((\"fuel\",163770.75631872762,spatial(14.218174600000001,48.5538931)), (\"doctors\",174042.96171411275,spatial(14.2434174,47.5685081)), (\"charging_station\",10564.01397016365,spatial(16.370722400000002,48.303155100000005)), (\"pub\",154698.9718850639,spatial(14.286806,48.2666039)), (\"dentist\",254704.32430449701,spatial(13.0023186,47.8082251)), (\"bar\",174206.24579120753,spatial(14.0390832,48.4169494)), (\"pub\",365776.35126474197,spatial(11.659643500000001,47.3227011)), (\"fast_food\",251955.56874192134,spatial(13.0420148,47.801107800000004)), (\"post_office\",193450.40458377672,spatial(14.850021400000001,46.805519700000005)), (\"restaurant\",236004.70107183207,spatial(13.461506900000002,47.3847651)), (\"veterinary\",202897.79664917913,spatial(13.9041...filterDistance: Array[(String, Double, spatial)] \u003d Array((\"restaurant\",176.44443408059763,spatial(16.3746467,48.2096649)), (\"restaurant\",71.00972673364244,spatial(16.3747538,48.2083537)), (\"cafe\",82.61424793609282,spatial(16.3749277,48.20831930000001)), (\"restaurant\",195.32887904959023,spatial(16.3751477,48.209696400000006)), (\"restaurant\",147.27566688891648,spatial(16.37434,48.2068923)), (\"pharmacy\",147.08488813917427,spatial(16.375668100000002,48.2086799)), (\"restaurant\",161.52452431627756,spatial(16.3716677,48.208330600000004)), (\"restaurant\",178.51807892063616,spatial(16.3715368,48.208655500000006)), (\"bank\",98.49043220312991,spatial(16.3731541,48.2074124)), (\"restaurant\",112.00008518343833,spatial(16.3723947,48.2078671)), (\"restaurant\",132.90271555681693,spatial(16.3743892,48.20703...casefilterDistance: finddist \u003d finddist([Lscala.Tuple3;@26db7cd)\n(\"restaurant\",176.44443408059763,spatial(16.3746467,48.2096649))\n(\"restaurant\",71.00972673364244,spatial(16.3747538,48.2083537))\ndensity: Int \u003d 72\ndensity\u003d72\nentropy: scala.collection.immutable.Set[String] \u003d Set(\"restaurant\", \"bar\", \"place_of_worship\", \"nightclub\", \"theatre\", \"police\", \"bank\", \"school\", \"bicycle_rental\", \"cafe\", \"embassy\", \"pharmacy\", \"fast_food\", \"bureau_de_change\")\ncountDiffernetVenues: Int \u003d 14\nentropy\u003d14\nshopName: String \u003d bar\ncountCoffeShop: Array[(String, Double, spatial)] \u003d Array((\"bar\",171.02059745503468,spatial(16.375343700000002,48.209336900000004)), (\"bar\",75.83705924959824,spatial(16.3733019,48.2075909)), (\"bar\",153.5712756136124,spatial(16.3717776,48.2083413)), (\"bar\",175.3966470130649,spatial(16.3750381,48.209531500000004)), (\"bar\",173.70223207630738,spatial(16.3761592,48.2079724)), (\"bar\",169.29474782864796,spatial(16.374546300000002,48.2067265)))\ncasefilterShop: finddist \u003d finddist([Lscala.Tuple3;@1f881a54)\npercenatge of bar to total number of nearby places.  \u003d8%\n"
+          }
+        ]
+      },
+      "runtimeInfos": {
+        "jobUrl": {
+          "propertyName": "jobUrl",
+          "label": "SPARK JOB",
+          "tooltip": "View in Spark web UI",
+          "group": "spark",
+          "values": [
+            "http://6a40bc0cfdf0:4040/jobs/job?id\u003d16",
+            "http://6a40bc0cfdf0:4040/jobs/job?id\u003d17"
+          ],
+          "interpreterSettingId": "spark"
+        }
+      },
+      "apps": [],
+      "jobName": "paragraph_1558623904667_-250382209",
+      "id": "20190523-150504_14128051",
+      "dateCreated": "2019-05-23 15:05:04.667",
+      "dateStarted": "2019-05-24 10:38:33.929",
+      "dateFinished": "2019-05-24 10:38:40.765",
+      "status": "FINISHED",
+      "progressUpdateIntervalMs": 500
+    },
+    {
+      "text": "%spark\nz.angularBind(\"casefilterDistance\", casefilterDistance)\nz.angularBind(\"casefilterShop\", casefilterShop)\n",
+      "user": "anonymous",
+      "dateUpdated": "2019-05-24 10:27:15.056",
+      "config": {
+        "colWidth": 12.0,
+        "fontSize": 9.0,
+        "enabled": true,
+        "results": {},
+        "editorSetting": {
+          "language": "scala",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "editorMode": "ace/mode/scala"
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "SUCCESS",
+        "msg": []
+      },
+      "apps": [],
+      "jobName": "paragraph_1558623949935_971330583",
+      "id": "20190523-150549_1426103185",
+      "dateCreated": "2019-05-23 15:05:49.935",
+      "dateStarted": "2019-05-24 10:27:15.083",
+      "dateFinished": "2019-05-24 10:27:15.648",
+      "status": "FINISHED",
+      "progressUpdateIntervalMs": 500
+    },
+    {
+      "title": "Measuring the number of neighbors around the place to assess the popularity of a place",
+      "text": "%angular\n\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n  \u003chead\u003e\n      \u003ctitle\u003eSLIPO\u003c/title\u003e\n      \u003c!-- Convex hull library --\u003e\n    \u003clink rel\u003d\"stylesheet\" href\u003d\"//ajax.googleapis.com/ajax/libs/jqueryui/1.11.1/themes/smoothness/jquery-ui.css\" /\u003e \n    \u003clink rel\u003d\"stylesheet\" href\u003d\"https://unpkg.com/leaflet@1.3.1/dist/leaflet.css\" integrity\u003d\"sha512-Rksm5RenBEKSKFjgI3a41vrjkw4EVPlJ3+OiI65vTjIdo9brlAacEuKOiQ5OFh7cOI1bkDwLqdLw3Zg0cRJAAQ\u003d\u003d\" crossorigin\u003d\"\"/\u003e\n    \u003cscript src\u003d\"https://unpkg.com/leaflet@1.3.1/dist/leaflet.js\" integrity\u003d\"sha512-/Nsx9X4HebavoBvEBuyp3I7od5tA0UzAxs+j83KgC8PU0kgB4XiK4Lfe4y4cgBtaRJQEIFCW+oC506aPT2L1zw\u003d\u003d\" crossorigin\u003d\"\"\u003e\u003c/script\u003e\n\n      \u003clink rel\u003d\"stylesheet\" href\u003d\"https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css\"\u003e  \n        \n    \n     \u003c!--  \u003cscript src\u003d\"https://fastcdn.org/Leaflet.awesome-markers/2.0.1/leaflet.awesome-markers.js\"\u003e\u003c/script\u003e --\u003e\n   \u003cscript\u003e\n      \n      /*\n       Leaflet.AwesomeMarkers, a plugin that adds colorful iconic markers for Leaflet, based on the Font Awesome icons\n       (c) 2012-2013, Lennard Voogdt\n\n      http://leafletjs.com\n      https://github.com/lvoogdt\n     */\n\n     /*global L*/\n\n(function (window, document, undefined) {\n    \"use strict\";\n    /*\n     * Leaflet.AwesomeMarkers assumes that you have already included the Leaflet library.\n     */\n\n    L.AwesomeMarkers \u003d {};\n\n    L.AwesomeMarkers.version \u003d \u00272.0.1\u0027;\n\n    L.AwesomeMarkers.Icon \u003d L.Icon.extend({\n        options: {\n            iconSize: [35, 45],\n            iconAnchor:   [17, 42],\n            popupAnchor: [1, -32],\n            shadowAnchor: [10, 12],\n            shadowSize: [36, 16],\n            className: \u0027awesome-marker\u0027,\n            prefix: \u0027glyphicon\u0027,\n            spinClass: \u0027fa-spin\u0027,\n            extraClasses: \u0027\u0027,\n            icon: \u0027home\u0027,\n            markerColor: \u0027blue\u0027,\n            iconColor: \u0027white\u0027\n        },\n\n        initialize: function (options) {\n            options \u003d L.Util.setOptions(this, options);\n        },\n\n        createIcon: function () {\n            var div \u003d document.createElement(\u0027div\u0027),\n                options \u003d this.options;\n\n            if (options.icon) {\n                div.innerHTML \u003d this._createInner();\n            }\n\n            if (options.bgPos) {\n                div.style.backgroundPosition \u003d\n                    (-options.bgPos.x) + \u0027px \u0027 + (-options.bgPos.y) + \u0027px\u0027;\n            }\n\n            this._setIconStyles(div, \u0027icon-\u0027 + options.markerColor);\n            return div;\n        },\n\n        _createInner: function() {\n            var iconClass, iconSpinClass \u003d \"\", iconColorClass \u003d \"\", iconColorStyle \u003d \"\", options \u003d this.options;\n\n            if(options.icon.slice(0,options.prefix.length+1) \u003d\u003d\u003d options.prefix + \"-\") {\n                iconClass \u003d options.icon;\n            } else {\n                iconClass \u003d options.prefix + \"-\" + options.icon;\n            }\n\n            if(options.spin \u0026\u0026 typeof options.spinClass \u003d\u003d\u003d \"string\") {\n                iconSpinClass \u003d options.spinClass;\n            }\n\n            if(options.iconColor) {\n                if(options.iconColor \u003d\u003d\u003d \u0027white\u0027 || options.iconColor \u003d\u003d\u003d \u0027black\u0027) {\n                    iconColorClass \u003d \"icon-\" + options.iconColor;\n                } else {\n                    iconColorStyle \u003d \"style\u003d\u0027color: \" + options.iconColor + \"\u0027 \";\n                }\n            }\n\n            return \"\u003ci \" + iconColorStyle + \"class\u003d\u0027\" + options.extraClasses + \" \" + options.prefix + \" \" + iconClass + \" \" + iconSpinClass + \" \" + iconColorClass + \"\u0027\u003e\u003c/i\u003e\";\n        },\n\n        _setIconStyles: function (img, name) {\n            var options \u003d this.options,\n                size \u003d L.point(options[name \u003d\u003d\u003d \u0027shadow\u0027 ? \u0027shadowSize\u0027 : \u0027iconSize\u0027]),\n                anchor;\n\n            if (name \u003d\u003d\u003d \u0027shadow\u0027) {\n                anchor \u003d L.point(options.shadowAnchor || options.iconAnchor);\n            } else {\n                anchor \u003d L.point(options.iconAnchor);\n            }\n\n            if (!anchor \u0026\u0026 size) {\n                anchor \u003d size.divideBy(2, true);\n            }\n\n            img.className \u003d \u0027awesome-marker-\u0027 + name + \u0027 \u0027 + options.className;\n\n            if (anchor) {\n                img.style.marginLeft \u003d (-anchor.x) + \u0027px\u0027;\n                img.style.marginTop  \u003d (-anchor.y) + \u0027px\u0027;\n            }\n\n            if (size) {\n                img.style.width  \u003d size.x + \u0027px\u0027;\n                img.style.height \u003d size.y + \u0027px\u0027;\n            }\n        },\n\n        createShadow: function () {\n            var div \u003d document.createElement(\u0027div\u0027);\n\n            this._setIconStyles(div, \u0027shadow\u0027);\n            return div;\n      }\n    });\n        \n    L.AwesomeMarkers.icon \u003d function (options) {\n        return new L.AwesomeMarkers.Icon(options);\n    };\n\n}(this, document));\n\n\n\u003c/script\u003e \n\n     \u003cscript src\u003d\"http://cdn.jsdelivr.net/gh/Rajjat/FrontEND/resources/hull.js\"\u003e\u003c/script\u003e\n  \n          \n  \u003c/head\u003e\n  \u003cbody\u003e\n     \u003cdiv id\u003d\"someId1\"\u003e\u003c/div\u003e\n     \u003cdiv id\u003d\"someId\"\u003e\u003c/div\u003e\n     \u003cdiv id\u003d\"demo\"\u003e\n     \u003ccenter\u003e\n\t \u003cdiv id\u003d\"mapid\" style\u003d\"width: 130%; height: 800px;\"\u003e\u003c/div\u003e\n     \u003c/center\u003e\n     \n     \u003cscript\u003e\n      \n      //var mymap \u003d L.map(\u0027mapid\u0027).setView([51.3,6.6], 11);\n      var mymap \u003d L.map(\u0027mapid\u0027).setView([48.20817324, 16.3738346], 11);\n\t\n      L.tileLayer(\u0027https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token\u003dpk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw\u0027, {\n      maxZoom: 18,\n      attribution: \u0027Map data \u0026copy; \u003ca href\u003d\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e contributors, \u0027 +\n      \u0027\u003ca href\u003d\"http://creativecommons.org/licenses/by-sa/2.0/\"\u003eCC-BY-SA\u003c/a\u003e, \u0027 +\n      \u0027Imagery © \u003ca href\u003d\"http://mapbox.com\"\u003eMapbox\u003c/a\u003e\u0027,\n      id: \u0027mapbox.streets\u0027\n      }).addTo(mymap);\n\n      \n      var colorMarker \u003d [];\n      colorMarker[0] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027red\u0027});\n      colorMarker[1] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027green\u0027});\n      colorMarker[2] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkred\u0027});\n      colorMarker[3] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027orange\u0027});\n      colorMarker[4] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkgreen\u0027});\n      colorMarker[5] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027blue\u0027});\n      colorMarker[6] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027purple\u0027});\n      colorMarker[7] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkpurple\u0027});\n      colorMarker[8] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n      colorMarker[9] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkblue\u0027});\n      // colorMarker[10] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n      // colorMarker[11] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n      // colorMarker[12] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n\n      var colorHull \u003d [];\n      colorHull[0] \u003d \u0027#e84c38\u0027 ;\n      colorHull[1] \u003d \u0027#93c827\u0027 ;\n      colorHull[2] \u003d \u0027#b54347\u0027 ;\n      colorHull[3] \u003d \u0027#f89b31\u0027 ;\n      colorHull[4] \u003d \u0027#919625\u0027 ;\n      colorHull[5] \u003d \u0027#3db2e5\u0027 ;\n      colorHull[6] \u003d \u0027#d759bb\u0027 ;\n      colorHull[7] \u003d \u0027#5e3c6f\u0027 ;\n      colorHull[8] \u003d \u0027#4e7080\u0027 ;\n      colorHull[9] \u003d \u0027#0066a4\u0027 ;\n      \n\n    \n      \n      \n      var element1 \u003d $(\u0027#someId1\u0027);\n      var angularVar1 \u003d \u0027casefilterDistance\u0027;\n      var scope1 \u003d angular.element(element1.parent(\u0027.ng-scope\u0027)).scope().compiledScope;\n      window.watcher \u003d scope1.$watch(angularVar1, function(newVal1, oldVal1){\n      var jsonE1 \u003d JSON.stringify(newVal1);\n     //  console.log(JSON.stringify(newVal1));\n      var data1 \u003d JSON.parse(jsonE1);\n      console.log(\"lat\u003d\"+data1.poi[0]._3.latitude);\n      \n    \n     L.circle([48.20817324,16.3738346], {radius: 200}).addTo(mymap);\n      for (i\u003d0;i\u003c72;i++){\n       console.log(\"lat\u003d\"+data1.poi[0]._3.latitude+data1.poi[0]._3.longitude);\n       L.marker([data1.poi[i]._3.latitude,data1.poi[i]._3.longitude], {icon: colorMarker[0]}).addTo(mymap).bindPopup(data1.poi[i]._1.toString());\n      }\n      L.marker([48.20817324,16.3738346], {icon: colorMarker[1]}).addTo(mymap);\n      //16.3738346,48.20817324\n     });\n     \n     \n    \u003c/script\u003e\n  \u003c/body\u003e\n\n\u003c/html\u003e\n",
+      "user": "anonymous",
+      "dateUpdated": "2019-05-24 11:44:22.303",
+      "config": {
+        "colWidth": 12.0,
+        "fontSize": 9.0,
+        "enabled": true,
+        "results": {},
+        "editorSetting": {
+          "language": "scala",
+          "editOnDblClick": true,
+          "completionKey": "TAB",
+          "completionSupport": false
+        },
+        "editorMode": "ace/mode/undefined",
+        "editorHide": true,
+        "tableHide": false,
+        "title": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "ANGULAR",
+            "data": "\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n  \u003chead\u003e\n      \u003ctitle\u003eSLIPO\u003c/title\u003e\n      \u003c!-- Convex hull library --\u003e\n    \u003clink rel\u003d\"stylesheet\" href\u003d\"//ajax.googleapis.com/ajax/libs/jqueryui/1.11.1/themes/smoothness/jquery-ui.css\" /\u003e \n    \u003clink rel\u003d\"stylesheet\" href\u003d\"https://unpkg.com/leaflet@1.3.1/dist/leaflet.css\" integrity\u003d\"sha512-Rksm5RenBEKSKFjgI3a41vrjkw4EVPlJ3+OiI65vTjIdo9brlAacEuKOiQ5OFh7cOI1bkDwLqdLw3Zg0cRJAAQ\u003d\u003d\" crossorigin\u003d\"\"/\u003e\n    \u003cscript src\u003d\"https://unpkg.com/leaflet@1.3.1/dist/leaflet.js\" integrity\u003d\"sha512-/Nsx9X4HebavoBvEBuyp3I7od5tA0UzAxs+j83KgC8PU0kgB4XiK4Lfe4y4cgBtaRJQEIFCW+oC506aPT2L1zw\u003d\u003d\" crossorigin\u003d\"\"\u003e\u003c/script\u003e\n\n      \u003clink rel\u003d\"stylesheet\" href\u003d\"https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css\"\u003e  \n        \n    \n     \u003c!--  \u003cscript src\u003d\"https://fastcdn.org/Leaflet.awesome-markers/2.0.1/leaflet.awesome-markers.js\"\u003e\u003c/script\u003e --\u003e\n   \u003cscript\u003e\n      \n      /*\n       Leaflet.AwesomeMarkers, a plugin that adds colorful iconic markers for Leaflet, based on the Font Awesome icons\n       (c) 2012-2013, Lennard Voogdt\n\n      http://leafletjs.com\n      https://github.com/lvoogdt\n     */\n\n     /*global L*/\n\n(function (window, document, undefined) {\n    \"use strict\";\n    /*\n     * Leaflet.AwesomeMarkers assumes that you have already included the Leaflet library.\n     */\n\n    L.AwesomeMarkers \u003d {};\n\n    L.AwesomeMarkers.version \u003d \u00272.0.1\u0027;\n\n    L.AwesomeMarkers.Icon \u003d L.Icon.extend({\n        options: {\n            iconSize: [35, 45],\n            iconAnchor:   [17, 42],\n            popupAnchor: [1, -32],\n            shadowAnchor: [10, 12],\n            shadowSize: [36, 16],\n            className: \u0027awesome-marker\u0027,\n            prefix: \u0027glyphicon\u0027,\n            spinClass: \u0027fa-spin\u0027,\n            extraClasses: \u0027\u0027,\n            icon: \u0027home\u0027,\n            markerColor: \u0027blue\u0027,\n            iconColor: \u0027white\u0027\n        },\n\n        initialize: function (options) {\n            options \u003d L.Util.setOptions(this, options);\n        },\n\n        createIcon: function () {\n            var div \u003d document.createElement(\u0027div\u0027),\n                options \u003d this.options;\n\n            if (options.icon) {\n                div.innerHTML \u003d this._createInner();\n            }\n\n            if (options.bgPos) {\n                div.style.backgroundPosition \u003d\n                    (-options.bgPos.x) + \u0027px \u0027 + (-options.bgPos.y) + \u0027px\u0027;\n            }\n\n            this._setIconStyles(div, \u0027icon-\u0027 + options.markerColor);\n            return div;\n        },\n\n        _createInner: function() {\n            var iconClass, iconSpinClass \u003d \"\", iconColorClass \u003d \"\", iconColorStyle \u003d \"\", options \u003d this.options;\n\n            if(options.icon.slice(0,options.prefix.length+1) \u003d\u003d\u003d options.prefix + \"-\") {\n                iconClass \u003d options.icon;\n            } else {\n                iconClass \u003d options.prefix + \"-\" + options.icon;\n            }\n\n            if(options.spin \u0026\u0026 typeof options.spinClass \u003d\u003d\u003d \"string\") {\n                iconSpinClass \u003d options.spinClass;\n            }\n\n            if(options.iconColor) {\n                if(options.iconColor \u003d\u003d\u003d \u0027white\u0027 || options.iconColor \u003d\u003d\u003d \u0027black\u0027) {\n                    iconColorClass \u003d \"icon-\" + options.iconColor;\n                } else {\n                    iconColorStyle \u003d \"style\u003d\u0027color: \" + options.iconColor + \"\u0027 \";\n                }\n            }\n\n            return \"\u003ci \" + iconColorStyle + \"class\u003d\u0027\" + options.extraClasses + \" \" + options.prefix + \" \" + iconClass + \" \" + iconSpinClass + \" \" + iconColorClass + \"\u0027\u003e\u003c/i\u003e\";\n        },\n\n        _setIconStyles: function (img, name) {\n            var options \u003d this.options,\n                size \u003d L.point(options[name \u003d\u003d\u003d \u0027shadow\u0027 ? \u0027shadowSize\u0027 : \u0027iconSize\u0027]),\n                anchor;\n\n            if (name \u003d\u003d\u003d \u0027shadow\u0027) {\n                anchor \u003d L.point(options.shadowAnchor || options.iconAnchor);\n            } else {\n                anchor \u003d L.point(options.iconAnchor);\n            }\n\n            if (!anchor \u0026\u0026 size) {\n                anchor \u003d size.divideBy(2, true);\n            }\n\n            img.className \u003d \u0027awesome-marker-\u0027 + name + \u0027 \u0027 + options.className;\n\n            if (anchor) {\n                img.style.marginLeft \u003d (-anchor.x) + \u0027px\u0027;\n                img.style.marginTop  \u003d (-anchor.y) + \u0027px\u0027;\n            }\n\n            if (size) {\n                img.style.width  \u003d size.x + \u0027px\u0027;\n                img.style.height \u003d size.y + \u0027px\u0027;\n            }\n        },\n\n        createShadow: function () {\n            var div \u003d document.createElement(\u0027div\u0027);\n\n            this._setIconStyles(div, \u0027shadow\u0027);\n            return div;\n      }\n    });\n        \n    L.AwesomeMarkers.icon \u003d function (options) {\n        return new L.AwesomeMarkers.Icon(options);\n    };\n\n}(this, document));\n\n\n\u003c/script\u003e \n\n     \u003cscript src\u003d\"http://cdn.jsdelivr.net/gh/Rajjat/FrontEND/resources/hull.js\"\u003e\u003c/script\u003e\n  \n          \n  \u003c/head\u003e\n  \u003cbody\u003e\n     \u003cdiv id\u003d\"someId1\"\u003e\u003c/div\u003e\n     \u003cdiv id\u003d\"someId\"\u003e\u003c/div\u003e\n     \u003cdiv id\u003d\"demo\"\u003e\n     \u003ccenter\u003e\n\t \u003cdiv id\u003d\"mapid\" style\u003d\"width: 130%; height: 800px;\"\u003e\u003c/div\u003e\n     \u003c/center\u003e\n     \n     \u003cscript\u003e\n      \n      //var mymap \u003d L.map(\u0027mapid\u0027).setView([51.3,6.6], 11);\n      var mymap \u003d L.map(\u0027mapid\u0027).setView([48.20817324, 16.3738346], 11);\n\t\n      L.tileLayer(\u0027https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token\u003dpk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw\u0027, {\n      maxZoom: 18,\n      attribution: \u0027Map data \u0026copy; \u003ca href\u003d\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e contributors, \u0027 +\n      \u0027\u003ca href\u003d\"http://creativecommons.org/licenses/by-sa/2.0/\"\u003eCC-BY-SA\u003c/a\u003e, \u0027 +\n      \u0027Imagery © \u003ca href\u003d\"http://mapbox.com\"\u003eMapbox\u003c/a\u003e\u0027,\n      id: \u0027mapbox.streets\u0027\n      }).addTo(mymap);\n\n      \n      var colorMarker \u003d [];\n      colorMarker[0] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027red\u0027});\n      colorMarker[1] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027green\u0027});\n      colorMarker[2] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkred\u0027});\n      colorMarker[3] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027orange\u0027});\n      colorMarker[4] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkgreen\u0027});\n      colorMarker[5] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027blue\u0027});\n      colorMarker[6] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027purple\u0027});\n      colorMarker[7] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkpurple\u0027});\n      colorMarker[8] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n      colorMarker[9] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkblue\u0027});\n      // colorMarker[10] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n      // colorMarker[11] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n      // colorMarker[12] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n\n      var colorHull \u003d [];\n      colorHull[0] \u003d \u0027#e84c38\u0027 ;\n      colorHull[1] \u003d \u0027#93c827\u0027 ;\n      colorHull[2] \u003d \u0027#b54347\u0027 ;\n      colorHull[3] \u003d \u0027#f89b31\u0027 ;\n      colorHull[4] \u003d \u0027#919625\u0027 ;\n      colorHull[5] \u003d \u0027#3db2e5\u0027 ;\n      colorHull[6] \u003d \u0027#d759bb\u0027 ;\n      colorHull[7] \u003d \u0027#5e3c6f\u0027 ;\n      colorHull[8] \u003d \u0027#4e7080\u0027 ;\n      colorHull[9] \u003d \u0027#0066a4\u0027 ;\n      \n\n    \n      \n      \n      var element1 \u003d $(\u0027#someId1\u0027);\n      var angularVar1 \u003d \u0027casefilterDistance\u0027;\n      var scope1 \u003d angular.element(element1.parent(\u0027.ng-scope\u0027)).scope().compiledScope;\n      window.watcher \u003d scope1.$watch(angularVar1, function(newVal1, oldVal1){\n      var jsonE1 \u003d JSON.stringify(newVal1);\n     //  console.log(JSON.stringify(newVal1));\n      var data1 \u003d JSON.parse(jsonE1);\n      console.log(\"lat\u003d\"+data1.poi[0]._3.latitude);\n      \n    \n     L.circle([48.20817324,16.3738346], {radius: 200}).addTo(mymap);\n      for (i\u003d0;i\u003c72;i++){\n       console.log(\"lat\u003d\"+data1.poi[0]._3.latitude+data1.poi[0]._3.longitude);\n       L.marker([data1.poi[i]._3.latitude,data1.poi[i]._3.longitude], {icon: colorMarker[0]}).addTo(mymap).bindPopup(data1.poi[i]._1.toString());\n      }\n      L.marker([48.20817324,16.3738346], {icon: colorMarker[1]}).addTo(mymap);\n      //16.3738346,48.20817324\n     });\n     \n     \n    \u003c/script\u003e\n  \u003c/body\u003e\n\n\u003c/html\u003e"
+          }
+        ]
+      },
+      "apps": [],
+      "jobName": "paragraph_1558643850305_322559246",
+      "id": "20190523-203730_275004211",
+      "dateCreated": "2019-05-23 20:37:30.305",
+      "dateStarted": "2019-05-24 11:44:22.313",
+      "dateFinished": "2019-05-24 11:44:22.322",
+      "status": "FINISHED",
+      "progressUpdateIntervalMs": 500
+    },
+    {
+      "title": "Number of competitors nearby place",
+      "text": "%angular\n\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n  \u003chead\u003e\n      \u003ctitle\u003eSLIPO\u003c/title\u003e\n      \u003c!-- Convex hull library --\u003e\n    \u003clink rel\u003d\"stylesheet\" href\u003d\"//ajax.googleapis.com/ajax/libs/jqueryui/1.11.1/themes/smoothness/jquery-ui.css\" /\u003e \n    \u003clink rel\u003d\"stylesheet\" href\u003d\"https://unpkg.com/leaflet@1.3.1/dist/leaflet.css\" integrity\u003d\"sha512-Rksm5RenBEKSKFjgI3a41vrjkw4EVPlJ3+OiI65vTjIdo9brlAacEuKOiQ5OFh7cOI1bkDwLqdLw3Zg0cRJAAQ\u003d\u003d\" crossorigin\u003d\"\"/\u003e\n    \u003cscript src\u003d\"https://unpkg.com/leaflet@1.3.1/dist/leaflet.js\" integrity\u003d\"sha512-/Nsx9X4HebavoBvEBuyp3I7od5tA0UzAxs+j83KgC8PU0kgB4XiK4Lfe4y4cgBtaRJQEIFCW+oC506aPT2L1zw\u003d\u003d\" crossorigin\u003d\"\"\u003e\u003c/script\u003e\n\n      \u003clink rel\u003d\"stylesheet\" href\u003d\"https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css\"\u003e  \n        \n    \n     \u003c!--  \u003cscript src\u003d\"https://fastcdn.org/Leaflet.awesome-markers/2.0.1/leaflet.awesome-markers.js\"\u003e\u003c/script\u003e --\u003e\n   \u003cscript\u003e\n      \n      /*\n       Leaflet.AwesomeMarkers, a plugin that adds colorful iconic markers for Leaflet, based on the Font Awesome icons\n       (c) 2012-2013, Lennard Voogdt\n\n      http://leafletjs.com\n      https://github.com/lvoogdt\n     */\n\n     /*global L*/\n\n(function (window, document, undefined) {\n    \"use strict\";\n    /*\n     * Leaflet.AwesomeMarkers assumes that you have already included the Leaflet library.\n     */\n\n    L.AwesomeMarkers \u003d {};\n\n    L.AwesomeMarkers.version \u003d \u00272.0.1\u0027;\n\n    L.AwesomeMarkers.Icon \u003d L.Icon.extend({\n        options: {\n            iconSize: [35, 45],\n            iconAnchor:   [17, 42],\n            popupAnchor: [1, -32],\n            shadowAnchor: [10, 12],\n            shadowSize: [36, 16],\n            className: \u0027awesome-marker\u0027,\n            prefix: \u0027glyphicon\u0027,\n            spinClass: \u0027fa-spin\u0027,\n            extraClasses: \u0027\u0027,\n            icon: \u0027home\u0027,\n            markerColor: \u0027blue\u0027,\n            iconColor: \u0027white\u0027\n        },\n\n        initialize: function (options) {\n            options \u003d L.Util.setOptions(this, options);\n        },\n\n        createIcon: function () {\n            var div \u003d document.createElement(\u0027div\u0027),\n                options \u003d this.options;\n\n            if (options.icon) {\n                div.innerHTML \u003d this._createInner();\n            }\n\n            if (options.bgPos) {\n                div.style.backgroundPosition \u003d\n                    (-options.bgPos.x) + \u0027px \u0027 + (-options.bgPos.y) + \u0027px\u0027;\n            }\n\n            this._setIconStyles(div, \u0027icon-\u0027 + options.markerColor);\n            return div;\n        },\n\n        _createInner: function() {\n            var iconClass, iconSpinClass \u003d \"\", iconColorClass \u003d \"\", iconColorStyle \u003d \"\", options \u003d this.options;\n\n            if(options.icon.slice(0,options.prefix.length+1) \u003d\u003d\u003d options.prefix + \"-\") {\n                iconClass \u003d options.icon;\n            } else {\n                iconClass \u003d options.prefix + \"-\" + options.icon;\n            }\n\n            if(options.spin \u0026\u0026 typeof options.spinClass \u003d\u003d\u003d \"string\") {\n                iconSpinClass \u003d options.spinClass;\n            }\n\n            if(options.iconColor) {\n                if(options.iconColor \u003d\u003d\u003d \u0027white\u0027 || options.iconColor \u003d\u003d\u003d \u0027black\u0027) {\n                    iconColorClass \u003d \"icon-\" + options.iconColor;\n                } else {\n                    iconColorStyle \u003d \"style\u003d\u0027color: \" + options.iconColor + \"\u0027 \";\n                }\n            }\n\n            return \"\u003ci \" + iconColorStyle + \"class\u003d\u0027\" + options.extraClasses + \" \" + options.prefix + \" \" + iconClass + \" \" + iconSpinClass + \" \" + iconColorClass + \"\u0027\u003e\u003c/i\u003e\";\n        },\n\n        _setIconStyles: function (img, name) {\n            var options \u003d this.options,\n                size \u003d L.point(options[name \u003d\u003d\u003d \u0027shadow\u0027 ? \u0027shadowSize\u0027 : \u0027iconSize\u0027]),\n                anchor;\n\n            if (name \u003d\u003d\u003d \u0027shadow\u0027) {\n                anchor \u003d L.point(options.shadowAnchor || options.iconAnchor);\n            } else {\n                anchor \u003d L.point(options.iconAnchor);\n            }\n\n            if (!anchor \u0026\u0026 size) {\n                anchor \u003d size.divideBy(2, true);\n            }\n\n            img.className \u003d \u0027awesome-marker-\u0027 + name + \u0027 \u0027 + options.className;\n\n            if (anchor) {\n                img.style.marginLeft \u003d (-anchor.x) + \u0027px\u0027;\n                img.style.marginTop  \u003d (-anchor.y) + \u0027px\u0027;\n            }\n\n            if (size) {\n                img.style.width  \u003d size.x + \u0027px\u0027;\n                img.style.height \u003d size.y + \u0027px\u0027;\n            }\n        },\n\n        createShadow: function () {\n            var div \u003d document.createElement(\u0027div\u0027);\n\n            this._setIconStyles(div, \u0027shadow\u0027);\n            return div;\n      }\n    });\n        \n    L.AwesomeMarkers.icon \u003d function (options) {\n        return new L.AwesomeMarkers.Icon(options);\n    };\n\n}(this, document));\n\n\n\u003c/script\u003e \n\n     \u003cscript src\u003d\"http://cdn.jsdelivr.net/gh/Rajjat/FrontEND/resources/hull.js\"\u003e\u003c/script\u003e\n  \n          \n  \u003c/head\u003e\n  \u003cbody\u003e\n     \u003cdiv id\u003d\"someId1\"\u003e\u003c/div\u003e\n     \u003cdiv id\u003d\"someId\"\u003e\u003c/div\u003e\n     \u003cdiv id\u003d\"demo\"\u003e\n     \u003ccenter\u003e\n\t \u003cdiv id\u003d\"mapid1\" style\u003d\"width: 130%; height: 800px;\"\u003e\u003c/div\u003e\n     \u003c/center\u003e\n     \n     \u003cscript\u003e\n      \n      //var mymap \u003d L.map(\u0027mapid\u0027).setView([51.3,6.6], 11);\n      var mymap1 \u003d L.map(\u0027mapid1\u0027).setView([48.20817324, 16.3738346], 11);\n\t\n      L.tileLayer(\u0027https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token\u003dpk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw\u0027, {\n      maxZoom: 18,\n      attribution: \u0027Map data \u0026copy; \u003ca href\u003d\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e contributors, \u0027 +\n      \u0027\u003ca href\u003d\"http://creativecommons.org/licenses/by-sa/2.0/\"\u003eCC-BY-SA\u003c/a\u003e, \u0027 +\n      \u0027Imagery © \u003ca href\u003d\"http://mapbox.com\"\u003eMapbox\u003c/a\u003e\u0027,\n      id: \u0027mapbox.streets\u0027\n      }).addTo(mymap1);\n\n      \n      var colorMarker \u003d [];\n      colorMarker[0] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027red\u0027});\n      colorMarker[1] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027green\u0027});\n      colorMarker[2] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkred\u0027});\n      colorMarker[3] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027orange\u0027});\n      colorMarker[4] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkgreen\u0027});\n      colorMarker[5] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027blue\u0027});\n      colorMarker[6] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027purple\u0027});\n      colorMarker[7] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkpurple\u0027});\n      colorMarker[8] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n      colorMarker[9] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkblue\u0027});\n      // colorMarker[10] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n      // colorMarker[11] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n      // colorMarker[12] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n\n      var colorHull \u003d [];\n      colorHull[0] \u003d \u0027#e84c38\u0027 ;\n      colorHull[1] \u003d \u0027#93c827\u0027 ;\n      colorHull[2] \u003d \u0027#b54347\u0027 ;\n      colorHull[3] \u003d \u0027#f89b31\u0027 ;\n      colorHull[4] \u003d \u0027#919625\u0027 ;\n      colorHull[5] \u003d \u0027#3db2e5\u0027 ;\n      colorHull[6] \u003d \u0027#d759bb\u0027 ;\n      colorHull[7] \u003d \u0027#5e3c6f\u0027 ;\n      colorHull[8] \u003d \u0027#4e7080\u0027 ;\n      colorHull[9] \u003d \u0027#0066a4\u0027 ;\n      \n\n    \n      \n      \n      var element1 \u003d $(\u0027#someId1\u0027);\n      var angularVar1 \u003d \u0027casefilterShop\u0027;\n      var scope1 \u003d angular.element(element1.parent(\u0027.ng-scope\u0027)).scope().compiledScope;\n      window.watcher \u003d scope1.$watch(angularVar1, function(newVal1, oldVal1){\n      var jsonE1 \u003d JSON.stringify(newVal1);\n       console.log(JSON.stringify(newVal1));\n      var data1 \u003d JSON.parse(jsonE1);\n      console.log(\"lat\u003d\"+data1.poi[0]._3.latitude);\n      \n     \n      for (i\u003d0;i\u003c6;i++){\n       console.log(\"lat\u003d\"+data1.poi[0]._3.latitude+data1.poi[0]._3.longitude);\n       L.marker([data1.poi[i]._3.latitude,data1.poi[i]._3.longitude], {icon: colorMarker[0]}).addTo(mymap1).bindPopup(data1.poi[i]._1.toString());\n      }\n      L.marker([48.20817324,16.3738346], {icon: colorMarker[1]}).addTo(mymap1);\n      //16.3738346,48.20817324\n     });\n     \n     \n    \u003c/script\u003e\n  \u003c/body\u003e\n\n\u003c/html\u003e\n",
+      "user": "anonymous",
+      "dateUpdated": "2019-05-24 10:41:50.076",
+      "config": {
+        "colWidth": 12.0,
+        "fontSize": 9.0,
+        "enabled": true,
+        "results": {},
+        "editorSetting": {
+          "language": "scala",
+          "editOnDblClick": true,
+          "completionKey": "TAB",
+          "completionSupport": false
+        },
+        "editorMode": "ace/mode/undefined",
+        "title": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "ANGULAR",
+            "data": "\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n  \u003chead\u003e\n      \u003ctitle\u003eSLIPO\u003c/title\u003e\n      \u003c!-- Convex hull library --\u003e\n    \u003clink rel\u003d\"stylesheet\" href\u003d\"//ajax.googleapis.com/ajax/libs/jqueryui/1.11.1/themes/smoothness/jquery-ui.css\" /\u003e \n    \u003clink rel\u003d\"stylesheet\" href\u003d\"https://unpkg.com/leaflet@1.3.1/dist/leaflet.css\" integrity\u003d\"sha512-Rksm5RenBEKSKFjgI3a41vrjkw4EVPlJ3+OiI65vTjIdo9brlAacEuKOiQ5OFh7cOI1bkDwLqdLw3Zg0cRJAAQ\u003d\u003d\" crossorigin\u003d\"\"/\u003e\n    \u003cscript src\u003d\"https://unpkg.com/leaflet@1.3.1/dist/leaflet.js\" integrity\u003d\"sha512-/Nsx9X4HebavoBvEBuyp3I7od5tA0UzAxs+j83KgC8PU0kgB4XiK4Lfe4y4cgBtaRJQEIFCW+oC506aPT2L1zw\u003d\u003d\" crossorigin\u003d\"\"\u003e\u003c/script\u003e\n\n      \u003clink rel\u003d\"stylesheet\" href\u003d\"https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css\"\u003e  \n        \n    \n     \u003c!--  \u003cscript src\u003d\"https://fastcdn.org/Leaflet.awesome-markers/2.0.1/leaflet.awesome-markers.js\"\u003e\u003c/script\u003e --\u003e\n   \u003cscript\u003e\n      \n      /*\n       Leaflet.AwesomeMarkers, a plugin that adds colorful iconic markers for Leaflet, based on the Font Awesome icons\n       (c) 2012-2013, Lennard Voogdt\n\n      http://leafletjs.com\n      https://github.com/lvoogdt\n     */\n\n     /*global L*/\n\n(function (window, document, undefined) {\n    \"use strict\";\n    /*\n     * Leaflet.AwesomeMarkers assumes that you have already included the Leaflet library.\n     */\n\n    L.AwesomeMarkers \u003d {};\n\n    L.AwesomeMarkers.version \u003d \u00272.0.1\u0027;\n\n    L.AwesomeMarkers.Icon \u003d L.Icon.extend({\n        options: {\n            iconSize: [35, 45],\n            iconAnchor:   [17, 42],\n            popupAnchor: [1, -32],\n            shadowAnchor: [10, 12],\n            shadowSize: [36, 16],\n            className: \u0027awesome-marker\u0027,\n            prefix: \u0027glyphicon\u0027,\n            spinClass: \u0027fa-spin\u0027,\n            extraClasses: \u0027\u0027,\n            icon: \u0027home\u0027,\n            markerColor: \u0027blue\u0027,\n            iconColor: \u0027white\u0027\n        },\n\n        initialize: function (options) {\n            options \u003d L.Util.setOptions(this, options);\n        },\n\n        createIcon: function () {\n            var div \u003d document.createElement(\u0027div\u0027),\n                options \u003d this.options;\n\n            if (options.icon) {\n                div.innerHTML \u003d this._createInner();\n            }\n\n            if (options.bgPos) {\n                div.style.backgroundPosition \u003d\n                    (-options.bgPos.x) + \u0027px \u0027 + (-options.bgPos.y) + \u0027px\u0027;\n            }\n\n            this._setIconStyles(div, \u0027icon-\u0027 + options.markerColor);\n            return div;\n        },\n\n        _createInner: function() {\n            var iconClass, iconSpinClass \u003d \"\", iconColorClass \u003d \"\", iconColorStyle \u003d \"\", options \u003d this.options;\n\n            if(options.icon.slice(0,options.prefix.length+1) \u003d\u003d\u003d options.prefix + \"-\") {\n                iconClass \u003d options.icon;\n            } else {\n                iconClass \u003d options.prefix + \"-\" + options.icon;\n            }\n\n            if(options.spin \u0026\u0026 typeof options.spinClass \u003d\u003d\u003d \"string\") {\n                iconSpinClass \u003d options.spinClass;\n            }\n\n            if(options.iconColor) {\n                if(options.iconColor \u003d\u003d\u003d \u0027white\u0027 || options.iconColor \u003d\u003d\u003d \u0027black\u0027) {\n                    iconColorClass \u003d \"icon-\" + options.iconColor;\n                } else {\n                    iconColorStyle \u003d \"style\u003d\u0027color: \" + options.iconColor + \"\u0027 \";\n                }\n            }\n\n            return \"\u003ci \" + iconColorStyle + \"class\u003d\u0027\" + options.extraClasses + \" \" + options.prefix + \" \" + iconClass + \" \" + iconSpinClass + \" \" + iconColorClass + \"\u0027\u003e\u003c/i\u003e\";\n        },\n\n        _setIconStyles: function (img, name) {\n            var options \u003d this.options,\n                size \u003d L.point(options[name \u003d\u003d\u003d \u0027shadow\u0027 ? \u0027shadowSize\u0027 : \u0027iconSize\u0027]),\n                anchor;\n\n            if (name \u003d\u003d\u003d \u0027shadow\u0027) {\n                anchor \u003d L.point(options.shadowAnchor || options.iconAnchor);\n            } else {\n                anchor \u003d L.point(options.iconAnchor);\n            }\n\n            if (!anchor \u0026\u0026 size) {\n                anchor \u003d size.divideBy(2, true);\n            }\n\n            img.className \u003d \u0027awesome-marker-\u0027 + name + \u0027 \u0027 + options.className;\n\n            if (anchor) {\n                img.style.marginLeft \u003d (-anchor.x) + \u0027px\u0027;\n                img.style.marginTop  \u003d (-anchor.y) + \u0027px\u0027;\n            }\n\n            if (size) {\n                img.style.width  \u003d size.x + \u0027px\u0027;\n                img.style.height \u003d size.y + \u0027px\u0027;\n            }\n        },\n\n        createShadow: function () {\n            var div \u003d document.createElement(\u0027div\u0027);\n\n            this._setIconStyles(div, \u0027shadow\u0027);\n            return div;\n      }\n    });\n        \n    L.AwesomeMarkers.icon \u003d function (options) {\n        return new L.AwesomeMarkers.Icon(options);\n    };\n\n}(this, document));\n\n\n\u003c/script\u003e \n\n     \u003cscript src\u003d\"http://cdn.jsdelivr.net/gh/Rajjat/FrontEND/resources/hull.js\"\u003e\u003c/script\u003e\n  \n          \n  \u003c/head\u003e\n  \u003cbody\u003e\n     \u003cdiv id\u003d\"someId1\"\u003e\u003c/div\u003e\n     \u003cdiv id\u003d\"someId\"\u003e\u003c/div\u003e\n     \u003cdiv id\u003d\"demo\"\u003e\n     \u003ccenter\u003e\n\t \u003cdiv id\u003d\"mapid1\" style\u003d\"width: 130%; height: 800px;\"\u003e\u003c/div\u003e\n     \u003c/center\u003e\n     \n     \u003cscript\u003e\n      \n      //var mymap \u003d L.map(\u0027mapid\u0027).setView([51.3,6.6], 11);\n      var mymap1 \u003d L.map(\u0027mapid1\u0027).setView([48.20817324, 16.3738346], 11);\n\t\n      L.tileLayer(\u0027https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token\u003dpk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw\u0027, {\n      maxZoom: 18,\n      attribution: \u0027Map data \u0026copy; \u003ca href\u003d\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e contributors, \u0027 +\n      \u0027\u003ca href\u003d\"http://creativecommons.org/licenses/by-sa/2.0/\"\u003eCC-BY-SA\u003c/a\u003e, \u0027 +\n      \u0027Imagery © \u003ca href\u003d\"http://mapbox.com\"\u003eMapbox\u003c/a\u003e\u0027,\n      id: \u0027mapbox.streets\u0027\n      }).addTo(mymap1);\n\n      \n      var colorMarker \u003d [];\n      colorMarker[0] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027red\u0027});\n      colorMarker[1] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027green\u0027});\n      colorMarker[2] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkred\u0027});\n      colorMarker[3] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027orange\u0027});\n      colorMarker[4] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkgreen\u0027});\n      colorMarker[5] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027blue\u0027});\n      colorMarker[6] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027purple\u0027});\n      colorMarker[7] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkpurple\u0027});\n      colorMarker[8] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n      colorMarker[9] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027darkblue\u0027});\n      // colorMarker[10] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n      // colorMarker[11] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n      // colorMarker[12] \u003d L.AwesomeMarkers.icon({icon: \u0027\u0027,markerColor: \u0027cadetblue\u0027});\n\n      var colorHull \u003d [];\n      colorHull[0] \u003d \u0027#e84c38\u0027 ;\n      colorHull[1] \u003d \u0027#93c827\u0027 ;\n      colorHull[2] \u003d \u0027#b54347\u0027 ;\n      colorHull[3] \u003d \u0027#f89b31\u0027 ;\n      colorHull[4] \u003d \u0027#919625\u0027 ;\n      colorHull[5] \u003d \u0027#3db2e5\u0027 ;\n      colorHull[6] \u003d \u0027#d759bb\u0027 ;\n      colorHull[7] \u003d \u0027#5e3c6f\u0027 ;\n      colorHull[8] \u003d \u0027#4e7080\u0027 ;\n      colorHull[9] \u003d \u0027#0066a4\u0027 ;\n      \n\n    \n      \n      \n      var element1 \u003d $(\u0027#someId1\u0027);\n      var angularVar1 \u003d \u0027casefilterShop\u0027;\n      var scope1 \u003d angular.element(element1.parent(\u0027.ng-scope\u0027)).scope().compiledScope;\n      window.watcher \u003d scope1.$watch(angularVar1, function(newVal1, oldVal1){\n      var jsonE1 \u003d JSON.stringify(newVal1);\n       console.log(JSON.stringify(newVal1));\n      var data1 \u003d JSON.parse(jsonE1);\n      console.log(\"lat\u003d\"+data1.poi[0]._3.latitude);\n      \n     \n      for (i\u003d0;i\u003c6;i++){\n       console.log(\"lat\u003d\"+data1.poi[0]._3.latitude+data1.poi[0]._3.longitude);\n       L.marker([data1.poi[i]._3.latitude,data1.poi[i]._3.longitude], {icon: colorMarker[0]}).addTo(mymap1).bindPopup(data1.poi[i]._1.toString());\n      }\n      L.marker([48.20817324,16.3738346], {icon: colorMarker[1]}).addTo(mymap1);\n      //16.3738346,48.20817324\n     });\n     \n     \n    \u003c/script\u003e\n  \u003c/body\u003e\n\n\u003c/html\u003e"
+          }
+        ]
+      },
+      "apps": [],
+      "jobName": "paragraph_1558643918446_-1812409443",
+      "id": "20190523-203838_1526222403",
+      "dateCreated": "2019-05-23 20:38:38.446",
+      "dateStarted": "2019-05-24 10:27:15.823",
+      "dateFinished": "2019-05-24 10:27:15.831",
+      "status": "FINISHED",
+      "progressUpdateIntervalMs": 500
+    },
+    {
+      "text": "%angular\n",
+      "user": "anonymous",
+      "dateUpdated": "2019-05-24 10:27:15.922",
+      "config": {
+        "colWidth": 12.0,
+        "fontSize": 9.0,
+        "enabled": true,
+        "results": {},
+        "editorSetting": {
+          "language": "scala",
+          "editOnDblClick": true,
+          "completionKey": "TAB",
+          "completionSupport": false
+        },
+        "editorMode": "ace/mode/undefined"
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "apps": [],
+      "jobName": "paragraph_1558693183739_-1213672146",
+      "id": "20190524-101943_177005039",
+      "dateCreated": "2019-05-24 10:19:43.739",
+      "status": "FINISHED",
+      "errorMessage": "",
+      "progressUpdateIntervalMs": 500
+    }
+  ],
+  "name": "prediction-Based on Geographic feature",
+  "id": "2EDCGTV36",
+  "noteParams": {},
+  "noteForms": {},
+  "angularObjects": {
+    "angular:shared_process": [],
+    "spark:shared_process": [
+      {
+        "name": "casefilterDistance",
+        "object": {
+          "poi": [
+            {
+              "_1": "\"restaurant\"",
+              "_2": 176.44443408059763,
+              "_3": {
+                "longitude": 16.3746467,
+                "latitude": 48.2096649
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 71.00972673364244,
+              "_3": {
+                "longitude": 16.3747538,
+                "latitude": 48.2083537
+              }
+            },
+            {
+              "_1": "\"cafe\"",
+              "_2": 82.61424793609282,
+              "_3": {
+                "longitude": 16.3749277,
+                "latitude": 48.20831930000001
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 195.32887904959023,
+              "_3": {
+                "longitude": 16.3751477,
+                "latitude": 48.209696400000006
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 147.27566688891648,
+              "_3": {
+                "longitude": 16.37434,
+                "latitude": 48.2068923
+              }
+            },
+            {
+              "_1": "\"pharmacy\"",
+              "_2": 147.08488813917427,
+              "_3": {
+                "longitude": 16.375668100000002,
+                "latitude": 48.2086799
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 161.52452431627756,
+              "_3": {
+                "longitude": 16.3716677,
+                "latitude": 48.208330600000004
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 178.51807892063616,
+              "_3": {
+                "longitude": 16.3715368,
+                "latitude": 48.208655500000006
+              }
+            },
+            {
+              "_1": "\"bank\"",
+              "_2": 98.49043220312991,
+              "_3": {
+                "longitude": 16.3731541,
+                "latitude": 48.2074124
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 112.00008518343833,
+              "_3": {
+                "longitude": 16.3723947,
+                "latitude": 48.2078671
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 132.90271555681693,
+              "_3": {
+                "longitude": 16.3743892,
+                "latitude": 48.2070366
+              }
+            },
+            {
+              "_1": "\"bank\"",
+              "_2": 163.81410649696818,
+              "_3": {
+                "longitude": 16.372998000000003,
+                "latitude": 48.2068096
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 145.27339541498796,
+              "_3": {
+                "longitude": 16.3743209,
+                "latitude": 48.2069076
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 167.00444747374883,
+              "_3": {
+                "longitude": 16.3733088,
+                "latitude": 48.209633700000005
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 164.20829891170325,
+              "_3": {
+                "longitude": 16.3736843,
+                "latitude": 48.209646600000006
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 170.84045407293266,
+              "_3": {
+                "longitude": 16.3718708,
+                "latitude": 48.2089781
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 187.31950704503893,
+              "_3": {
+                "longitude": 16.374629900000002,
+                "latitude": 48.209772300000004
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 111.90240542084013,
+              "_3": {
+                "longitude": 16.3741585,
+                "latitude": 48.2071903
+              }
+            },
+            {
+              "_1": "\"cafe\"",
+              "_2": 146.87054292677135,
+              "_3": {
+                "longitude": 16.3719733,
+                "latitude": 48.2086271
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 199.22505381351436,
+              "_3": {
+                "longitude": 16.371296400000002,
+                "latitude": 48.2087639
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 199.38317555575244,
+              "_3": {
+                "longitude": 16.373134,
+                "latitude": 48.206442
+              }
+            },
+            {
+              "_1": "\"bicycle_rental\"",
+              "_2": 126.2750489569779,
+              "_3": {
+                "longitude": 16.3722371,
+                "latitude": 48.207778000000005
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 153.93479388595924,
+              "_3": {
+                "longitude": 16.372517900000002,
+                "latitude": 48.207102500000005
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 134.92608753970268,
+              "_3": {
+                "longitude": 16.372938100000002,
+                "latitude": 48.207117100000005
+              }
+            },
+            {
+              "_1": "\"place_of_worship\"",
+              "_2": 75.30077843415312,
+              "_3": {
+                "longitude": 16.3733997,
+                "latitude": 48.2075612
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 186.55545690902434,
+              "_3": {
+                "longitude": 16.373979300000002,
+                "latitude": 48.2098482
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 168.59614686784667,
+              "_3": {
+                "longitude": 16.3738582,
+                "latitude": 48.2066571
+              }
+            },
+            {
+              "_1": "\"cafe\"",
+              "_2": 181.56585880063224,
+              "_3": {
+                "longitude": 16.3743582,
+                "latitude": 48.2065781
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 193.63044143826957,
+              "_3": {
+                "longitude": 16.3760061,
+                "latitude": 48.207204700000005
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 186.968576568198,
+              "_3": {
+                "longitude": 16.3716936,
+                "latitude": 48.209062900000006
+              }
+            },
+            {
+              "_1": "\"bar\"",
+              "_2": 171.02059745503468,
+              "_3": {
+                "longitude": 16.375343700000002,
+                "latitude": 48.209336900000004
+              }
+            },
+            {
+              "_1": "\"bank\"",
+              "_2": 100.59628744471247,
+              "_3": {
+                "longitude": 16.3733981,
+                "latitude": 48.207316600000006
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 186.90563344761304,
+              "_3": {
+                "longitude": 16.376239,
+                "latitude": 48.207665500000004
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 132.93356001432227,
+              "_3": {
+                "longitude": 16.3750772,
+                "latitude": 48.207311000000004
+              }
+            },
+            {
+              "_1": "\"cafe\"",
+              "_2": 118.90058860406306,
+              "_3": {
+                "longitude": 16.3752418,
+                "latitude": 48.208687000000005
+              }
+            },
+            {
+              "_1": "\"pharmacy\"",
+              "_2": 144.12006207885648,
+              "_3": {
+                "longitude": 16.3724142,
+                "latitude": 48.209058600000006
+              }
+            },
+            {
+              "_1": "\"nightclub\"",
+              "_2": 139.67266839595598,
+              "_3": {
+                "longitude": 16.372719800000002,
+                "latitude": 48.20716040000001
+              }
+            },
+            {
+              "_1": "\"theatre\"",
+              "_2": 125.72320897610439,
+              "_3": {
+                "longitude": 16.372964500000002,
+                "latitude": 48.2072026
+              }
+            },
+            {
+              "_1": "\"cafe\"",
+              "_2": 104.73232282804975,
+              "_3": {
+                "longitude": 16.373259100000002,
+                "latitude": 48.209033500000004
+              }
+            },
+            {
+              "_1": "\"police\"",
+              "_2": 195.44287514923596,
+              "_3": {
+                "longitude": 16.372195,
+                "latitude": 48.20955
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 157.56173641046914,
+              "_3": {
+                "longitude": 16.3748431,
+                "latitude": 48.2094207
+              }
+            },
+            {
+              "_1": "\"bar\"",
+              "_2": 75.83705924959824,
+              "_3": {
+                "longitude": 16.3733019,
+                "latitude": 48.2075909
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 60.261520571630356,
+              "_3": {
+                "longitude": 16.374360900000003,
+                "latitude": 48.2077601
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 26.726072155807717,
+              "_3": {
+                "longitude": 16.3739521,
+                "latitude": 48.207946
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 199.88840719300694,
+              "_3": {
+                "longitude": 16.374301900000003,
+                "latitude": 48.209943700000004
+              }
+            },
+            {
+              "_1": "\"bar\"",
+              "_2": 153.5712756136124,
+              "_3": {
+                "longitude": 16.3717776,
+                "latitude": 48.2083413
+              }
+            },
+            {
+              "_1": "\"cafe\"",
+              "_2": 83.58567096432057,
+              "_3": {
+                "longitude": 16.37496,
+                "latitude": 48.2081226
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 192.8308602348877,
+              "_3": {
+                "longitude": 16.3734013,
+                "latitude": 48.2098832
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 189.81384998369066,
+              "_3": {
+                "longitude": 16.3763432,
+                "latitude": 48.2078282
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 176.7748239215891,
+              "_3": {
+                "longitude": 16.3755253,
+                "latitude": 48.2092948
+              }
+            },
+            {
+              "_1": "\"fast_food\"",
+              "_2": 123.91366812827246,
+              "_3": {
+                "longitude": 16.3723403,
+                "latitude": 48.2076731
+              }
+            },
+            {
+              "_1": "\"school\"",
+              "_2": 78.17905212438085,
+              "_3": {
+                "longitude": 16.3728781,
+                "latitude": 48.207876600000006
+              }
+            },
+            {
+              "_1": "\"fast_food\"",
+              "_2": 137.1969163849923,
+              "_3": {
+                "longitude": 16.372115,
+                "latitude": 48.207716000000005
+              }
+            },
+            {
+              "_1": "\"cafe\"",
+              "_2": 135.55686595636288,
+              "_3": {
+                "longitude": 16.3720208,
+                "latitude": 48.2080149
+              }
+            },
+            {
+              "_1": "\"bank\"",
+              "_2": 182.9702364361974,
+              "_3": {
+                "longitude": 16.3714252,
+                "latitude": 48.208533
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 161.98057889434318,
+              "_3": {
+                "longitude": 16.3745946,
+                "latitude": 48.2068074
+              }
+            },
+            {
+              "_1": "\"fast_food\"",
+              "_2": 192.6054678609906,
+              "_3": {
+                "longitude": 16.3712597,
+                "latitude": 48.2079372
+              }
+            },
+            {
+              "_1": "\"pharmacy\"",
+              "_2": 146.7084630056598,
+              "_3": {
+                "longitude": 16.374604100000003,
+                "latitude": 48.2069576
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 196.56198437699976,
+              "_3": {
+                "longitude": 16.3717417,
+                "latitude": 48.20925930000001
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 162.264126070109,
+              "_3": {
+                "longitude": 16.3728105,
+                "latitude": 48.2068834
+              }
+            },
+            {
+              "_1": "\"bar\"",
+              "_2": 175.3966470130649,
+              "_3": {
+                "longitude": 16.3750381,
+                "latitude": 48.209531500000004
+              }
+            },
+            {
+              "_1": "\"bar\"",
+              "_2": 173.70223207630738,
+              "_3": {
+                "longitude": 16.3761592,
+                "latitude": 48.2079724
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 195.13184935226153,
+              "_3": {
+                "longitude": 16.3733003,
+                "latitude": 48.209891600000006
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 167.67878630282112,
+              "_3": {
+                "longitude": 16.375970600000002,
+                "latitude": 48.2076756
+              }
+            },
+            {
+              "_1": "\"embassy\"",
+              "_2": 157.29158445766572,
+              "_3": {
+                "longitude": 16.371796800000002,
+                "latitude": 48.208569100000005
+              }
+            },
+            {
+              "_1": "\"bureau_de_change\"",
+              "_2": 133.96341497210383,
+              "_3": {
+                "longitude": 16.3720331,
+                "latitude": 48.208072800000004
+              }
+            },
+            {
+              "_1": "\"bank\"",
+              "_2": 169.02657650413263,
+              "_3": {
+                "longitude": 16.3750067,
+                "latitude": 48.2068692
+              }
+            },
+            {
+              "_1": "\"cafe\"",
+              "_2": 23.304169291201745,
+              "_3": {
+                "longitude": 16.3740142,
+                "latitude": 48.208001200000005
+              }
+            },
+            {
+              "_1": "\"bar\"",
+              "_2": 169.29474782864796,
+              "_3": {
+                "longitude": 16.374546300000002,
+                "latitude": 48.2067265
+              }
+            },
+            {
+              "_1": "\"bank\"",
+              "_2": 129.2818109157601,
+              "_3": {
+                "longitude": 16.3720906,
+                "latitude": 48.208142300000006
+              }
+            },
+            {
+              "_1": "\"bank\"",
+              "_2": 142.72514185194999,
+              "_3": {
+                "longitude": 16.372828600000002,
+                "latitude": 48.209267800000006
+              }
+            },
+            {
+              "_1": "\"restaurant\"",
+              "_2": 179.7383491375497,
+              "_3": {
+                "longitude": 16.3738862,
+                "latitude": 48.209789300000004
+              }
+            }
+          ]
+        },
+        "noteId": "2EDCGTV36"
+      },
+      {
+        "name": "casefilterShop",
+        "object": {
+          "poi": [
+            {
+              "_1": "\"bar\"",
+              "_2": 171.02059745503468,
+              "_3": {
+                "longitude": 16.375343700000002,
+                "latitude": 48.209336900000004
+              }
+            },
+            {
+              "_1": "\"bar\"",
+              "_2": 75.83705924959824,
+              "_3": {
+                "longitude": 16.3733019,
+                "latitude": 48.2075909
+              }
+            },
+            {
+              "_1": "\"bar\"",
+              "_2": 153.5712756136124,
+              "_3": {
+                "longitude": 16.3717776,
+                "latitude": 48.2083413
+              }
+            },
+            {
+              "_1": "\"bar\"",
+              "_2": 175.3966470130649,
+              "_3": {
+                "longitude": 16.3750381,
+                "latitude": 48.209531500000004
+              }
+            },
+            {
+              "_1": "\"bar\"",
+              "_2": 173.70223207630738,
+              "_3": {
+                "longitude": 16.3761592,
+                "latitude": 48.2079724
+              }
+            },
+            {
+              "_1": "\"bar\"",
+              "_2": 169.29474782864796,
+              "_3": {
+                "longitude": 16.374546300000002,
+                "latitude": 48.2067265
+              }
+            }
+          ]
+        },
+        "noteId": "2EDCGTV36"
+      },
+      {
+        "name": "countCoffeShop",
+        "object": [
+          {
+            "_1": "\"bar\"",
+            "_2": 171.02059745503468,
+            "_3": {
+              "longitude": 16.375343700000002,
+              "latitude": 48.209336900000004
+            }
+          },
+          {
+            "_1": "\"bar\"",
+            "_2": 75.83705924959824,
+            "_3": {
+              "longitude": 16.3733019,
+              "latitude": 48.2075909
+            }
+          },
+          {
+            "_1": "\"bar\"",
+            "_2": 153.5712756136124,
+            "_3": {
+              "longitude": 16.3717776,
+              "latitude": 48.2083413
+            }
+          },
+          {
+            "_1": "\"bar\"",
+            "_2": 175.3966470130649,
+            "_3": {
+              "longitude": 16.3750381,
+              "latitude": 48.209531500000004
+            }
+          },
+          {
+            "_1": "\"bar\"",
+            "_2": 173.70223207630738,
+            "_3": {
+              "longitude": 16.3761592,
+              "latitude": 48.2079724
+            }
+          },
+          {
+            "_1": "\"bar\"",
+            "_2": 169.29474782864796,
+            "_3": {
+              "longitude": 16.374546300000002,
+              "latitude": 48.2067265
+            }
+          }
+        ],
+        "noteId": "2EDCGTV36"
+      }
+    ]
+  },
+  "config": {
+    "isZeppelinNotebookCronEnable": false
+  },
+  "info": {}
+}
